@@ -1,0 +1,26 @@
+# Virtual environment
+env/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# OS / tooling
+.DS_Store
+.gradio/
+
+# Large / generated data (download from Kaggle; regenerate locally)
+data/images/
+data/filtered_images/
+data/embeddings.npy
+
+# Trained weights (optional: remove this line to version the checkpoint)
+checkpoints/*.pth
+
+# Jupyter / outputs
+.ipynb_checkpoints/
+outputs/

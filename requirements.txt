@@ -1,0 +1,8 @@
+# Install PyTorch first for your platform/CUDA: https://pytorch.org/get-started/locally/
+torch
+torchvision
+gradio
+pandas
+numpy
+scikit-learn
+Pillow

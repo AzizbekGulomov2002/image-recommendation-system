@@ -19,6 +19,7 @@ model.load_state_dict(torch.load("checkpoints/best_model.pth", map_location="cpu
 model.eval()
 
 embed_model = torch.nn.Sequential(*list(model.children())[:-1])
+embed_model.eval()
 
 embeddings = np.load("data/embeddings.npy")
 metadata = pd.read_csv("data/metadata.csv")
@@ -41,7 +42,10 @@ def create_links(name):
 
 # ===== MAIN =====
 def process(img):
-    # numpy → PIL fix
+    if img is None:
+        return None, "No image uploaded", ""
+
+    # numpy → PIL
     if isinstance(img, np.ndarray):
         img = Image.fromarray(img)
 
@@ -51,10 +55,8 @@ def process(img):
     # ===== CLASSIFICATION =====
     with torch.no_grad():
         logits = model(x)
-
         probs = torch.softmax(logits, dim=1)
         conf, pred = torch.max(probs, dim=1)
-
         conf = conf.item()
         pred = pred.item()
 
@@ -62,33 +64,38 @@ def process(img):
         emb = embed_model(x)
         emb = emb.view(1, -1).numpy()
 
+    # ===== DETECTED TEXT =====  ← bu qism yo'q edi
+    label = "Sneaker" if pred == 1 else "Other"
+    detected = f"{label} ({round(conf * 100, 1)}%)"
+
     # ===== SIMILARITY =====
     sims = cosine_similarity(emb, embeddings)[0]
+    top3_idx = sims.argsort()[::-1][1:4]
 
-    # self-match skip
-    best_idx = sims.argsort()[::-1][1]
+    result = ""
+    found = 0
 
-    item = metadata.iloc[best_idx]
-    links = create_links(item["product_name"])
-    colors = detect_colors(img)
-    colors_text = ", ".join(colors)
+    for rank, idx in enumerate(top3_idx, 1):
+        score = round(float(sims[idx]), 3)
+        if score < 0.80:
+            continue
 
-    # ===== DETECTED =====
-    if pred == 1:
-        detected = f"Sneaker ({round(conf*100,1)}%)"
-    else:
-        detected = f"Other ({round(conf*100,1)}%)"
+        found += 1
+        item = metadata.iloc[idx]
+        links = create_links(item["product_name"])
 
-    # ===== RESULT =====
-    result = f"""
-### {item['product_name']}
-
-🎨 Detected Color: {colors}
-
-👉 <a href="{links['amazon']}" target="_blank">Amazon</a>  
-👉 <a href="{links['ebay']}" target="_blank">eBay</a>  
+        result += f"""
+---
+### #{found} {item['product_name']}
+🔗 Similarity: `{score}`  
+🎨 Color: {item['color']}  
+👉 <a href="{links['amazon']}" target="_blank">Amazon</a> &nbsp;
+👉 <a href="{links['ebay']}" target="_blank">eBay</a> &nbsp;
 👉 <a href="{links['google']}" target="_blank">Google</a>
 """
+
+    if not result:
+        result = "❌ No similar products found (similarity < 0.95)"
 
     return img, detected, result
 

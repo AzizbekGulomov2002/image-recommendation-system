@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+import random
 
 # load data
 embeddings = np.load("data/embeddings.npy")
@@ -64,15 +66,69 @@ def recommend(query_index, top_k=3):
 
 
 # 🧪 test
-if __name__ == "__main__":
-    results = recommend(0)
+# if __name__ == "__main__":
+#     results = recommend(0)
 
+#     for r in results:
+#         print("\n---")
+#         print("Product:", r["product_name"])
+#         print("Score:", r["similarity"])
+#         print("Price:", r["price"])
+#         print("Amazon:", r["links"]["amazon"])
+#         print("eBay:", r["links"]["ebay"])
+#         print("Google:", r["links"]["google"])
+#         print("Why:", r["explanation"])
+        
+
+
+def evaluate_topk(k_values=[1, 3, 5]):
+    """Cosine similarity vs Random baseline taqqoslash"""
+    results = {}
+    
+    for k in k_values:
+        cosine_correct = 0
+        random_correct = 0
+        total = len(embeddings)
+        
+        for i in range(total):
+            query_vec = embeddings[i].reshape(1, -1)
+            true_color = metadata.iloc[i]["color"]
+            true_class = metadata.iloc[i]["class"]
+            
+            # Cosine top-k
+            sims = cos_sim(query_vec, embeddings)[0]
+            top_k_idx = sims.argsort()[::-1][1:k+1]
+            cosine_match = any(
+                metadata.iloc[j]["color"] == true_color 
+                for j in top_k_idx
+            )
+            if cosine_match:
+                cosine_correct += 1
+            
+            # Random baseline
+            rand_idx = random.sample([x for x in range(total) if x != i], k)
+            random_match = any(
+                metadata.iloc[j]["color"] == true_color 
+                for j in rand_idx
+            )
+            if random_match:
+                random_correct += 1
+        
+        results[k] = {
+            "cosine": cosine_correct / total,
+            "random": random_correct / total
+        }
+        print(f"Top-{k} | Cosine: {cosine_correct/total:.3f} | Random: {random_correct/total:.3f}")
+    
+    return results
+
+if __name__ == "__main__":
+    print("=== Top-K Evaluation ===")
+    evaluate_topk(k_values=[1, 3, 5])
+    
+    print("\n=== Sample Recommendation ===")
+    results = recommend(0)
     for r in results:
-        print("\n---")
-        print("Product:", r["product_name"])
-        print("Score:", r["similarity"])
-        print("Price:", r["price"])
-        print("Amazon:", r["links"]["amazon"])
-        print("eBay:", r["links"]["ebay"])
-        print("Google:", r["links"]["google"])
-        print("Why:", r["explanation"])
+        print(f"\nProduct: {r['product_name']}")
+        print(f"Score:   {r['similarity']:.4f}")
+        print(f"Why:     {r['explanation']}")

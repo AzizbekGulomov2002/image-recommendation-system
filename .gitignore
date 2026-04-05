@@ -23,4 +23,6 @@ checkpoints/*.pth
 
 # Jupyter / outputs
 .ipynb_checkpoints/
-outputs/
+outputs/.DS_Store
+outputs/gradcam/
+outputs/predictions/

@@ -41,6 +41,10 @@ project/
 │   └── best_model.pth       # Written by train.py
 ├── app/
 │   └── gradio_app.py
+├── outputs/
+│   ├── loss_curve.png
+│   ├── accuracy_curve.png
+│   └── confusion_matrix.png
 └── requirements.txt
 ```
 
@@ -112,6 +116,34 @@ python3 app/gradio_app.py
 ```
 
 The app loads the checkpoint, `data/embeddings.npy`, and `data/metadata.csv`, then launches Gradio (default local URL is printed in the terminal). Upload an image and click **Run**.
+
+## Results
+
+The figures below summarize a training run exported to `outputs/` (e.g., loss logging, validation metrics, and a test-set confusion matrix). They support qualitative assessment of optimization dynamics and discrimination between the two supervised classes.
+
+### Training and validation loss
+
+![Training and validation loss](outputs/loss_curve.png)
+
+The curve compares empirical risk on the training split with loss on a held-out validation split across epochs. A steady decline in training loss indicates parameter updates are reducing the classification objective, while the validation trace characterizes generalization; elevated volatility on validation relative to training is common for small batches and limited data.
+
+### Validation accuracy
+
+![Validation accuracy per epoch](outputs/accuracy_curve.png)
+
+Validation accuracy is the fraction of correctly labeled validation examples after each epoch. A rapid rise followed by a plateau suggests the decision boundary stabilizes early under the chosen optimizer settings, though perfect scores on small validation sets should be interpreted cautiously alongside external testing.
+
+### Confusion matrix (test set)
+
+![Confusion matrix on test set](outputs/confusion_matrix.png)
+
+The matrix cross-tabulates reference labels (rows) against argmax predictions (columns) for the binary task. Diagonal mass corresponds to correct **Sneaker** versus **Non-Sneaker** assignments; off-diagonal cells quantify misclassification patterns and are informative for diagnosing class-specific bias when sample sizes are comparable.
+
+## Demo
+
+The Gradio front end presents three functional regions: an image upload widget, a read-only **Detected** field reporting softmax confidence for the binary head, and a Markdown panel that renders the retrieved catalog title, K-means color readout, and outbound commerce links. This layout keeps inference, similarity-based retrieval, and lightweight explainability in a single view suitable for informal user studies or demonstrations.
+
+A static full-window capture of the running UI is not included under `outputs/` in this repository. To illustrate the interface in this document, save a screenshot as `outputs/gradio_ui.png` next to the training figures and add `![Gradio web interface](outputs/gradio_ui.png)` under this heading.
 
 ## How recommendation works
 

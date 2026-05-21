@@ -1,19 +1,21 @@
-import sys
+"""Gradio web demo: upload an image, see class + top-3 similar sneakers with shop links."""
+
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import gradio as gr
 import numpy as np
-from utils import detect_colors
-import torch
-from PIL import Image
-import torchvision.transforms as transforms
 import pandas as pd
+import torch
+import torchvision.transforms as transforms
+from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity
 
 from model import get_model
+from utils import detect_colors
 
-# ===== LOAD =====
 model = get_model()
 model.load_state_dict(torch.load("checkpoints/best_model.pth", map_location="cpu"))
 model.eval()
@@ -27,97 +29,63 @@ metadata = pd.read_csv("data/metadata.csv")
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
 
-# ===== LINKS =====
-def create_links(name):
-    q = name.replace(" ", "+")
+def create_links(product_name: str) -> dict:
+    query = product_name.replace(" ", "+")
     return {
-        "amazon": f"https://www.amazon.com/s?k={q}",
-        "ebay": f"https://www.ebay.com/sch/i.html?_nkw={q}",
-        "google": f"https://www.google.com/search?q={q}+buy"
+        "amazon": f"https://www.amazon.com/s?k={query}",
+        "ebay": f"https://www.ebay.com/sch/i.html?_nkw={query}",
+        "google": f"https://www.google.com/search?q={query}+buy",
     }
 
 
-# ===== MAIN =====
 def process(img):
     if img is None:
         return None, "No image uploaded", ""
 
-    # numpy → PIL
     if isinstance(img, np.ndarray):
         img = Image.fromarray(img)
-
     img = img.convert("RGB")
-    x = transform(img).unsqueeze(0)
+    tensor = transform(img).unsqueeze(0)
 
-    # ===== CLASSIFICATION =====
     with torch.no_grad():
-        logits = model(x)
+        logits = model(tensor)
         probs = torch.softmax(logits, dim=1)
-        conf, pred = torch.max(probs, dim=1)
-        conf = conf.item()
-        pred = pred.item()
+        conf, pred = probs.max(dim=1)
+        vector = embed_model(tensor).view(1, -1).numpy()
 
-        # ===== EMBEDDING =====
-        emb = embed_model(x)
-        emb = emb.view(1, -1).numpy()
+    label = "Sneaker" if pred.item() == 1 else "Other"
+    detected = f"{label} ({conf.item() * 100:.1f}%)"
 
-    # ===== DETECTED TEXT =====  ← bu qism yo'q edi
-    label = "Sneaker" if pred == 1 else "Other"
-    detected = f"{label} ({round(conf * 100, 1)}%)"
+    sims = cosine_similarity(vector, embeddings)[0]
+    top_idx = sims.argsort()[::-1][1:4]
 
-    # ===== SIMILARITY =====
-    sims = cosine_similarity(emb, embeddings)[0]
-    top3_idx = sims.argsort()[::-1][1:4]
-
-    result = ""
-    found = 0
-
-    for rank, idx in enumerate(top3_idx, 1):
-        score = round(float(sims[idx]), 3)
-        if score < 0.80:
-            continue
-
-        found += 1
+    text = f"**Detected colors:** {', '.join(detect_colors(img))}\n\n"
+    for rank, idx in enumerate(top_idx, start=1):
         item = metadata.iloc[idx]
         links = create_links(item["product_name"])
+        text += f"### #{rank} {item['product_name']}\n"
+        text += f"Similarity: {sims[idx]:.3f} | Color: {item['color']}\n"
+        text += f"[Amazon]({links['amazon']}) | [eBay]({links['ebay']}) | [Google]({links['google']})\n\n"
 
-        result += f"""
----
-### #{found} {item['product_name']}
-🔗 Similarity: `{score}`  
-🎨 Color: {item['color']}  
-👉 <a href="{links['amazon']}" target="_blank">Amazon</a> &nbsp;
-👉 <a href="{links['ebay']}" target="_blank">eBay</a> &nbsp;
-👉 <a href="{links['google']}" target="_blank">Google</a>
-"""
-
-    if not result:
-        result = "❌ No similar products found (similarity < 0.95)"
-
-    return img, detected, result
+    return img, detected, text
 
 
-# ===== UI =====
-with gr.Blocks() as demo:
-    gr.Markdown("# 👟 Sneaker Recommendation System")
+with gr.Blocks(title="Sneaker Recommendation System") as demo:
+    gr.Markdown("# Sneaker Recommendation System")
+    gr.Markdown("Upload a product image to classify it and find visually similar sneakers.")
 
     with gr.Row():
         with gr.Column():
-            input_img = gr.Image(label="Upload Image")
-            detected = gr.Textbox(label="Detected")
-
+            image_in = gr.Image(label="Upload image")
+            detected = gr.Textbox(label="Detected class")
         with gr.Column():
-            result = gr.Markdown(label="Recommendation")
+            result = gr.Markdown(label="Recommendations")
 
-    btn = gr.Button("Run")
+    gr.Button("Find similar products").click(process, image_in, [image_in, detected, result])
 
-    btn.click(
-        fn=process,
-        inputs=input_img,
-        outputs=[input_img, detected, result]
-    )
-
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()
